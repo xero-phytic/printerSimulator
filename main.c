@@ -12,7 +12,7 @@
 #include <argp.h>
 
 
-
+int *semVar;
 char *read_file(char *filename);
 
 void *pipe_write(int fd[], char *string);
@@ -21,12 +21,22 @@ void *pipe_read(int fd[]);
 
 void *pipe_write_t(char* string);
 
+void my_sem_init(int *init);
+
+void my_sem_lock();
+
+void my_sem_unlock();
 
 
 int FD[2];
+
 int main(int argc, char *argv[]) {
     int nArgs = argc - 1;
 
+    int val = 1;
+    semVar = &val;
+    *semVar = 0;
+    my_sem_init(semVar);
 
     if (pipe(FD) < 0) {
         perror("ERR : creating pipe");
@@ -38,6 +48,7 @@ int main(int argc, char *argv[]) {
     pthread_t thread[nArgs];
 
     if ((processID = fork()) == 0) {
+
         for (int i = 0; i < nArgs; i++) {
             char *string = read_file(argv[i+1]);
             pthread_create(thread + i, NULL, (void *(*)(void *)) pipe_write_t, string);
@@ -48,32 +59,26 @@ int main(int argc, char *argv[]) {
         }
         close(FD[1]);
 
+
     } else {
+
         for (int i = 0; i < nArgs; i++) {
-            sleep(1);
+//            sleep(1);
             pthread_create(thread, NULL, (void *(*)(void *)) pipe_read, FD);
         }
 
         for (int i = 0; i < nArgs; i++) {
             pthread_join(*thread, NULL);
         }
-
 //        close(FD[0]);
         wait(NULL);
     }
-
-
 }
 
 
 
-
-
-
-
-
-
 char *read_file(char *filename) {
+
     char *buffer = NULL;
     int strSize, read_size;
     FILE *pIoFile = fopen(filename, "r");
@@ -99,6 +104,7 @@ char *read_file(char *filename) {
 }
 
 void *pipe_write(int fd[], char *string) {
+     my_sem_unlock();
 
     close(fd[0]);
     size_t strSize = strlen(string);
@@ -114,13 +120,15 @@ void *pipe_write(int fd[], char *string) {
 }
 
 void *pipe_read(int fd[]) {
+
+    my_sem_lock();
     close(fd[1]);
     size_t sizeString;
 
     if (read(fd[0], &sizeString, sizeof(size_t)) < 0) {
         perror("Err : reading size_t\n");
     }
-//    char string[sizeString]
+
     char *string = malloc(sizeString);
     if (read(fd[0], string, sizeof(char) * sizeString) < 0) {
         perror("Err : reading string\n");
@@ -135,6 +143,24 @@ void *pipe_write_t(char *string){
     pipe_write(FD, string);
 }
 
+void my_sem_init(int *init){
+    *semVar = *init;
+    printf("init sem to %d\n", *semVar);
+
+}
+void my_sem_lock(){
+    printf("turn lock on \n" );
+    *semVar = *semVar - 1;
+    printf("sem %d \n", *semVar);
+    while (*semVar < 0){
+        //lock
+    }
+}
+void my_sem_unlock(){
+    printf("turn lock off \n" );
+    *semVar = *semVar + 1;
+    printf("sem %d \n", *semVar);
+}
 
 
 
