@@ -12,31 +12,27 @@
 #include <argp.h>
 
 
-int *semVar;
 char *read_file(char *filename);
 
 void *pipe_write(int fd[], char *string);
 
 void *pipe_read(int fd[]);
 
-void *pipe_write_t(char* string);
+void *pipe_write_t(char *string);
 
-void my_sem_init(int *init);
+pthread_mutex_t mutexRead;
+pthread_mutex_t mutexWrite;
 
-void my_sem_lock();
-
-void my_sem_unlock();
-
-
+typedef enum {false, true} bool;
 int FD[2];
+
+pthread_cond_t cond;
+bool s = false;
 
 int main(int argc, char *argv[]) {
     int nArgs = argc - 1;
-
-    int val = 1;
-    semVar = &val;
-    *semVar = 0;
-    my_sem_init(semVar);
+    pthread_mutex_init(&mutexRead,NULL);
+    pthread_mutex_init(&mutexWrite, NULL);
 
     if (pipe(FD) < 0) {
         perror("ERR : creating pipe");
@@ -48,16 +44,14 @@ int main(int argc, char *argv[]) {
     pthread_t thread[nArgs];
 
     if ((processID = fork()) == 0) {
-
         for (int i = 0; i < nArgs; i++) {
-            char *string = read_file(argv[i+1]);
+            char *string = read_file(argv[i + 1]);
             pthread_create(thread + i, NULL, (void *(*)(void *)) pipe_write_t, string);
-//            pipe_write(FD, read_file(argv[i]));
         }
         for (int i = 0; i < nArgs; i++) {
             pthread_join(*(thread + i), NULL);
         }
-        close(FD[1]);
+//        close(FD[1]);
 
 
     } else {
@@ -73,8 +67,8 @@ int main(int argc, char *argv[]) {
 //        close(FD[0]);
         wait(NULL);
     }
+    return EXIT_SUCCESS;
 }
-
 
 
 char *read_file(char *filename) {
@@ -104,11 +98,10 @@ char *read_file(char *filename) {
 }
 
 void *pipe_write(int fd[], char *string) {
-     my_sem_unlock();
+    pthread_mutex_lock(&mutexWrite);
 
     close(fd[0]);
     size_t strSize = strlen(string);
-
 
     if (write(fd[1], &strSize, sizeof(size_t)) < 0) {
         perror("couldn't write string size to pip");
@@ -117,11 +110,11 @@ void *pipe_write(int fd[], char *string) {
         perror("couldn't write to pip");
     }
 //    close(FD[1]);
+    pthread_mutex_unlock(&mutexWrite);
 }
 
 void *pipe_read(int fd[]) {
-
-    my_sem_lock();
+    pthread_mutex_lock(&mutexRead);
     close(fd[1]);
     size_t sizeString;
 
@@ -133,34 +126,15 @@ void *pipe_read(int fd[]) {
     if (read(fd[0], string, sizeof(char) * sizeString) < 0) {
         perror("Err : reading string\n");
     }
+    string[sizeString +1] = '\0';
     printf("%s\n", string);
     free(string);
 //    close(FD[0]);
+    pthread_mutex_unlock(&mutexRead);
 
 }
 
-void *pipe_write_t(char *string){
+void *pipe_write_t(char *string) {
     pipe_write(FD, string);
 }
-
-void my_sem_init(int *init){
-    *semVar = *init;
-    printf("init sem to %d\n", *semVar);
-
-}
-void my_sem_lock(){
-    printf("turn lock on \n" );
-    *semVar = *semVar - 1;
-    printf("sem %d \n", *semVar);
-    while (*semVar < 0){
-        //lock
-    }
-}
-void my_sem_unlock(){
-    printf("turn lock off \n" );
-    *semVar = *semVar + 1;
-    printf("sem %d \n", *semVar);
-}
-
-
 
