@@ -4,13 +4,10 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <errno.h>
 #include <pthread.h>
-#include <sys/stat.h>
-#include <semaphore.h>
 #include <fcntl.h>
-#include <argp.h>
 
+typedef enum {false, true} bool;
 
 char *read_file(char *filename);
 
@@ -20,17 +17,17 @@ void *pipe_read(int fd[]);
 
 void *pipe_write_t(char *string);
 
+bool is_last();
+
 pthread_mutex_t mutexRead;
 pthread_mutex_t mutexWrite;
 
-typedef enum {false, true} bool;
 int FD[2];
-
-pthread_cond_t cond;
-bool s = false;
+int iteration = 0;
+int maxIteration = 0;
 
 int main(int argc, char *argv[]) {
-    int nArgs = argc - 1;
+     maxIteration = argc - 1;
     pthread_mutex_init(&mutexRead,NULL);
     pthread_mutex_init(&mutexWrite, NULL);
 
@@ -41,30 +38,26 @@ int main(int argc, char *argv[]) {
 
     pid_t processID;
 
-    pthread_t thread[nArgs];
+    pthread_t thread[maxIteration];
 
     if ((processID = fork()) == 0) {
-        for (int i = 0; i < nArgs; i++) {
+        //child process
+        for (int i = 0; i < maxIteration; i++) {
             char *string = read_file(argv[i + 1]);
             pthread_create(thread + i, NULL, (void *(*)(void *)) pipe_write_t, string);
         }
-        for (int i = 0; i < nArgs; i++) {
+        for (int i = 0; i < maxIteration; i++) {
             pthread_join(*(thread + i), NULL);
         }
-//        close(FD[1]);
-
 
     } else {
-
-        for (int i = 0; i < nArgs; i++) {
-//            sleep(1);
+        //main process
+        for (int i = 0; i < maxIteration; i++) {
             pthread_create(thread, NULL, (void *(*)(void *)) pipe_read, FD);
         }
-
-        for (int i = 0; i < nArgs; i++) {
+        for (int i = 0; i < maxIteration; i++) {
             pthread_join(*thread, NULL);
         }
-//        close(FD[0]);
         wait(NULL);
     }
     return EXIT_SUCCESS;
@@ -126,10 +119,12 @@ void *pipe_read(int fd[]) {
     if (read(fd[0], string, sizeof(char) * sizeString) < 0) {
         perror("Err : reading string\n");
     }
-    string[sizeString +1] = '\0';
+    string[sizeString] = '\0';
     printf("%s\n", string);
     free(string);
-//    close(FD[0]);
+    if (is_last()){
+        close(fd[0]);
+    }
     pthread_mutex_unlock(&mutexRead);
 
 }
@@ -138,3 +133,10 @@ void *pipe_write_t(char *string) {
     pipe_write(FD, string);
 }
 
+bool is_last(){
+    if (iteration == maxIteration){
+        (iteration)++;
+        return true;
+    }
+    return false;
+}
