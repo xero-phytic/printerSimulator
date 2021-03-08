@@ -6,8 +6,11 @@
 #include <sys/wait.h>
 #include <pthread.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 
-typedef enum {false, true} bool;
+typedef enum {
+    false, true
+} bool;
 
 char *read_file(char *filename);
 
@@ -19,6 +22,10 @@ void *pipe_write_t(char *string);
 
 bool is_last();
 
+void print_0(char *s);
+
+void do_something();
+
 pthread_mutex_t mutexRead;
 pthread_mutex_t mutexWrite;
 
@@ -27,21 +34,27 @@ int iteration = 0;
 int maxIteration = 0;
 
 int main(int argc, char *argv[]) {
-     maxIteration = argc - 1;
-    pthread_mutex_init(&mutexRead,NULL);
-    pthread_mutex_init(&mutexWrite, NULL);
 
+    if (pthread_mutex_init(&mutexRead, NULL) !=0){
+        perror("ERR : init mutexRead");
+        return EXIT_FAILURE;
+    }
+    if (pthread_mutex_init(&mutexWrite, NULL) !=0){
+        perror("ERR : init mutexWrite");
+        return EXIT_FAILURE;
+    }
     if (pipe(FD) < 0) {
         perror("ERR : creating pipe");
         return EXIT_FAILURE;
     }
-
+    maxIteration = argc - 1;
     pid_t processID;
-
     pthread_t thread[maxIteration];
-
     if ((processID = fork()) == 0) {
         //child process
+        if (argc == 1) {
+            return EXIT_FAILURE;
+        }
         for (int i = 0; i < maxIteration; i++) {
             char *string = read_file(argv[i + 1]);
             pthread_create(thread + i, NULL, (void *(*)(void *)) pipe_write_t, string);
@@ -52,20 +65,35 @@ int main(int argc, char *argv[]) {
 
     } else {
         //main process
+        if (argc == 1) {
+            print_0(argv[0]);
+        }
         for (int i = 0; i < maxIteration; i++) {
             pthread_create(thread, NULL, (void *(*)(void *)) pipe_read, FD);
         }
+        //do something while waiting ...
+        do_something();
+
         for (int i = 0; i < maxIteration; i++) {
             pthread_join(*thread, NULL);
         }
         wait(NULL);
     }
+    pthread_mutex_destroy(&mutexRead);
+    pthread_mutex_destroy(&mutexWrite);
     return EXIT_SUCCESS;
 }
 
+void do_something() {
+    int i = 0;
+    while (true) {
+        i++;
+        printf("Time passed ... %d\n", i);
+        sleep(1);
+    }
+}
 
 char *read_file(char *filename) {
-
     char *buffer = NULL;
     int strSize, read_size;
     FILE *pIoFile = fopen(filename, "r");
@@ -92,7 +120,6 @@ char *read_file(char *filename) {
 
 void *pipe_write(int fd[], char *string) {
     pthread_mutex_lock(&mutexWrite);
-
     close(fd[0]);
     size_t strSize = strlen(string);
 
@@ -122,9 +149,10 @@ void *pipe_read(int fd[]) {
     string[sizeString] = '\0';
     printf("%s\n", string);
     free(string);
-    if (is_last()){
+    if (is_last()) {
         close(fd[0]);
     }
+    sleep(3);
     pthread_mutex_unlock(&mutexRead);
 
 }
@@ -133,10 +161,29 @@ void *pipe_write_t(char *string) {
     pipe_write(FD, string);
 }
 
-bool is_last(){
-    if (iteration == maxIteration){
+bool is_last() {
+    if (iteration == maxIteration) {
         (iteration)++;
         return true;
     }
     return false;
+}
+
+void print_0(char *s) {
+    char *msg = "\n#\tNO FILE ARGUMENT PASSED ! ";
+    struct winsize window;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);
+    int pound = window.ws_col / 2 ;
+    int space = pound - strlen(msg);
+    for (int i = 0; i < pound; i++) {
+        printf("#");
+    }
+    printf("%s", msg);
+    for (int i = 0; i < space -6;++i) {
+        printf(" ");
+    }
+    printf("#\n");
+    for (int i = 0; i < pound; i++) {
+        printf("#");
+    }
 }
