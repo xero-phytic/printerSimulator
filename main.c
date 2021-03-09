@@ -40,6 +40,10 @@ void print_0(char *s);
 /* Function supplémentaire pour prouvé que les threads ne bloque pas tous les autre procss */
 void do_something();
 
+void print_array(const int *arr, int n);
+void swap(int *a, int *b);
+void bubble_sort(int *arr, int size);
+void gen_test_rand_arr();
 /* mutex variable pour controler race condition pendant lecture de la pipe */
 pthread_mutex_t mutexRead;
 
@@ -106,6 +110,7 @@ int main(int argc, char *argv[]) {
             iteration = i + 1;
             pthread_create(thread + i, NULL, (void *(*)(void *)) pipe_write_t, argv[iteration]);
         }
+        //do somthing while waitnig
 
         /* attendre les threads qui'l de termine avant de terminer le procss  */
         for (int i = 0; i < maxIteration; i++) {
@@ -131,10 +136,10 @@ int main(int argc, char *argv[]) {
         }
 
         //do something while waiting ...
-        /* uncomment the next line and  line N°150 to better simulate printer
-         * and check threads are working fine*/
+        /* décommentez la ligne  142 et 143et la sleep de la ligne N ° 257 pour mieux simuler l'imprimante
+          * et vérifiez que les threads fonctionnent correctement  */
+//        srand(time(NULL));
 //        do_something();
-
         /* attendre les threads avant de terminer le processus  */
         for (int i = 0; i < maxIteration; i++) {
             pthread_join(*thread, NULL);
@@ -151,11 +156,13 @@ int main(int argc, char *argv[]) {
 
 
 void do_something() {
+    printf("gen and sort array while waintig for print\n");
     int i = 0;
     while (true) {
         i++;
         printf("Time passed ... %d\n", i);
-        sleep(1);
+        gen_test_rand_arr(); //generer est affichier un tableux Organisé par ordre croissant
+        sleep(1); // attendre
     }
 }
 
@@ -246,6 +253,7 @@ void *pipe_read(int fd[]) {
     if (is_last()) {
         close(fd[0]);
     }
+    //time pomping ink
 //    sleep(3);
     /*librer pour les autre thread */
     pthread_mutex_unlock(&mutexRead);
@@ -285,4 +293,42 @@ void print_0(char *s) {
     for (int i = 0; i < pound; i++) {
         printf("#");
     }
+}
+
+void print_array(const int *arr, int n){
+    for (int i = 0; i < n; i++){
+        printf("%d ", arr[i]);
+    }
+    printf("\n");
+}
+void swap(int *a, int *b){
+    int temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+void bubble_sort(int *arr, int size){
+    for (int i = 0; i < size - 1; i++){
+        bool swapped = false;
+        for (int j = 0; j < size - 1 - i; j++){
+            if (arr[j] > arr[j + 1]){
+                swap(&arr[j], &arr[j + 1]);
+                swapped = true;
+            }
+        }
+        if (!swapped){
+            break;
+        }
+    }
+}
+
+void gen_test_rand_arr(){
+    const int size = 100;
+    int *arr = (int *)calloc(size, sizeof(int));
+    for (int i = 0; i < size; i++){
+        arr[i] = rand() % 100;
+    }
+    bubble_sort(arr, size);
+    print_array(arr, size);
+    free(arr);
 }
